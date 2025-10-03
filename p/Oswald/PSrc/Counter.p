@@ -42,8 +42,13 @@ machine Counter {
             versionedManifest = downloadManifest(this, objectStore);
             print format("{0} starting with manifest: {1}", this, versionedManifest);
 
+            if (versionedManifest.m.snapshotLsn >= 0) {
+                value = downloadSnapshot(this, objectStore, versionedManifest.m.snapshotLsn) as int;
+                print format("{0} recovered snapshot at LSN {1}: {2}",
+                    this, versionedManifest.m.snapshotLsn, value);
+            }
+
             nextLsn = versionedManifest.m.snapshotLsn + 1;
-            assert versionedManifest.m.snapshotLsn == -1, "Snapshot recovery not implemented yet";
 
             goto CatchUpRecovery;
         }
@@ -94,6 +99,10 @@ machine Counter {
                     nextLsn = nextLsn + 1;
 
                     announce eCounterState, (sender=this, value=value, lsn=nextLsn - 1);
+
+                    if ($) {
+                        writeSnapshotAsync(objectStore, nextLsn - 1, value);
+                    }
                 } else {
                     print format("{0} detected conflict during append at LSN {1}", this, nextLsn);
 
@@ -133,7 +142,10 @@ machine Counter {
                 "{0} detected manifest version change during recovery: {1} -> {2}",
                 this, versionedManifest.v, freshVersionedManifest.v
             );
-            // TODO: optimize recovery condition.
+
+            // TODO: fix recovery condition after fixing the idempotency bug
+            // in incrementing but before GC!
+            return;
 
             // Restart recovery.
             goto SnapshotRecovery;

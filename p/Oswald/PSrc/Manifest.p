@@ -37,3 +37,23 @@ fun downloadManifest(sender: machine, store: ObjectStore): tVersionedManifest {
 
     return ret;
 }
+
+/// Upload manifest using CAS semantics; returns true if successful.
+fun uploadManifest(
+    sender: machine,
+    store: ObjectStore,
+    manifest: tManifest,
+    expectedVersion: int
+): bool {
+    var ret: bool;
+
+    send store, eUploadRequest,
+        (sender=sender, key=manifestKey(), value=manifest, expected_version=expectedVersion);
+    receive {
+        case eUploadResponse: (response: tUploadResponse) {
+            ret = response.success;
+        }
+    }
+
+    return ret;
+}
