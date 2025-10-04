@@ -126,7 +126,9 @@ machine Counter {
             }
 
             // Assert we never lost our own committed increments.
-            assert myCounterValue <= mem.writers[id];
+            assert myCounterValue <= mem.writers[id],
+                format("Lost committed increments: expected at least {0}, got {1}",
+                    myCounterValue, mem.writers[id]);
 
             while (mem.writers[id] < numIncrements) {
                 op = (writer=id, prevValue=mem.writers[id]);
@@ -203,10 +205,8 @@ machine Counter {
             // full recovery.
             //
             // See https://nvartolomei.com/oswald/#writer-garbage-collector-conflicts
-            if (safeLsn < freshVersionedManifest.m.gcWatermark) {
-                safeLsn = lsn;
+            if (safeLsn <= freshVersionedManifest.m.gcWatermark) {
                 goto SnapshotRecovery;
-                return;
             }
 
 
