@@ -24,6 +24,19 @@ machine Counter {
     /// Log Sequence Number (LSN) to assign to the next log chunk.
     var nextLsn: int;
 
+    /// The "safe" LSN is a checkpoint in the LSN sequence that this counter has
+    /// has complete knowledge of. If GC advances the watermark beyond this LSN,
+    /// the counter must perform full recovery to avoid operating on potentially
+    /// garbage-collected state.
+    ///
+    /// It is initialized with the snapshot LSN at the time of recovery and
+    /// periodically updated to latest LSN as long as we are ahead of the GC
+    /// watermark.
+    ///
+    /// This mechanism prevents write loss when a counter falls behind and the
+    /// garbage collector removes chunks under its feet.
+    var safeLsn: int;
+
     /// User state.
     var mem: tCounterState;
 
@@ -63,6 +76,9 @@ machine Counter {
                     this, versionedManifest.m.snapshotLsn, mem);
             }
 
+            // Set safeLsn to the current snapshot LSN - this is our "safe point"
+            // that we know hasn't been garbage collected yet.
+            safeLsn = versionedManifest.m.snapshotLsn;
             nextLsn = versionedManifest.m.snapshotLsn + 1;
 
             if (!(id in mem.writers)) {
@@ -162,7 +178,14 @@ machine Counter {
 
     /// Ensures that the manifest has not been updated by another process
     /// (like a garbage collector) while the current operation was in flight.
-    /// If a change is detected, it triggers a full recovery.
+    /// If a change is detected, it validates whether our safeLsn is still
+    /// above the garbage collection watermark. If not, it triggers a full
+    /// recovery to prevent operating on potentially garbage-collected state.
+    ///
+    /// This prevents write loss scenarios where:
+    /// 1. Counter falls behind and relies on old chunks
+    /// 2. Garbage collector removes those chunks
+    /// 3. Counter attempts to continue from an inconsistent state
     fun validateLsnSeqConsistency(lsn: int) {
         var freshVersionedManifest: tVersionedManifest;
 
@@ -175,10 +198,21 @@ machine Counter {
                 this, versionedManifest.v, freshVersionedManifest.v
             );
 
-            // TODO: optimize recovery condition.
+            // Our safe LSN has been garbage collected - restart full recovery.
+            // Chunks we depend on may have been garbage collected and we need
+            // full recovery.
+            //
+            // See https://nvartolomei.com/oswald/#writer-garbage-collector-conflicts
+            if (safeLsn < freshVersionedManifest.m.gcWatermark) {
+                safeLsn = lsn;
+                goto SnapshotRecovery;
+                return;
+            }
 
-            // Restart recovery.
-            goto SnapshotRecovery;
+
         }
+
+        /// No manifest change, GC is surely behind our safe point.
+        safeLsn = lsn;
     }
 }
