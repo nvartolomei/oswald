@@ -37,3 +37,10 @@ fun uploadChunk(sender: machine, store: ObjectStore, lsn: int, body: data): tUpl
 
     return ret;
 }
+
+fun removeChunk(sender: machine, store: ObjectStore, lsn: int) {
+    send store, eDeleteRequest, (sender=sender, key=logChunkKey(lsn));
+    receive {
+        case eDeleteResponse: (response: tDeleteResponse) {}
+    }
+}

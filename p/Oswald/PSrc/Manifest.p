@@ -6,7 +6,7 @@
 ///     entries are included in that snapshot. snapshotLsn + 1 is the first log
 ///     chunk considered for recovery. Log entries prior to snapshotLsn are
 ///     eligible for garbage collection.
-type tManifest = (snapshotLsn: int);
+type tManifest = (snapshotLsn: int, gcWatermark: int);
 
 /// Manifest paired with its object-store version for CAS semantics.
 type tVersionedManifest = (m: tManifest, v: int);
@@ -25,7 +25,7 @@ fun downloadManifest(sender: machine, store: ObjectStore): tVersionedManifest {
         case eDownloadResponse: (metaResponse: tDownloadResponse) {
             if (metaResponse.value == null) {
                 assert metaResponse.version == 0;
-                ret = (m=(snapshotLsn=-1,), v=0);
+                ret = (m=(snapshotLsn=-1,gcWatermark=-1), v=0);
             } else {
                 ret = (
                     m=metaResponse.value as tManifest,

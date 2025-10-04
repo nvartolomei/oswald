@@ -6,5 +6,6 @@
     <PFile>./PTst/</PFile>
   </InputFiles>
   <OutputDir>./PGenerated/</OutputDir>
+  <IncludeProject>../System/System.pproj</IncludeProject>
   <IncludeProject>../ObjectStore/ObjectStore.pproj</IncludeProject>
 </Project>

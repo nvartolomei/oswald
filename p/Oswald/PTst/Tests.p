@@ -2,6 +2,7 @@ machine ConcurrentCounters {
     start state Init {
         entry {
             var objectStore: ObjectStore;
+            var gc: GarbageCollector;
             var counters: seq[Counter];
             var numRounds: int;
             var numCounters: int;
@@ -15,6 +16,7 @@ machine ConcurrentCounters {
             numIncrements = 10;
 
             objectStore = new ObjectStore();
+            gc = new GarbageCollector((store=objectStore,));
 
             roundIx = 0;
             while (roundIx < numRounds) {
@@ -42,6 +44,8 @@ machine ConcurrentCounters {
 
                 roundIx = roundIx + 1;
             }
+
+            send gc, halt;
         }
     }
 }

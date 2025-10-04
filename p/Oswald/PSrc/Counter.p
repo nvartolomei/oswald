@@ -30,6 +30,9 @@ machine Counter {
     /// Number of increments to perform by this writer.
     var numIncrements: int;
 
+    /// For internal invariants.
+    var myCounterValue: int;
+
     /// Initial state that sets up the counter and begins the recovery process.
     start state Init {
         entry (input: (parent: machine, objectStore: ObjectStore, numIncrements: int)) {
@@ -106,6 +109,9 @@ machine Counter {
                 announce eCounterState, (sender=this, value=mem.value, lsn=nextLsn - 1);
             }
 
+            // Assert we never lost our own committed increments.
+            assert myCounterValue <= mem.writers[id];
+
             while (mem.writers[id] < numIncrements) {
                 op = (writer=id, prevValue=mem.writers[id]);
                 tUploadChunkResult = uploadChunk(this, objectStore, nextLsn, op);
@@ -114,6 +120,7 @@ machine Counter {
 
                     // Apply committed chunk locally.
                     applyChunk(op);
+                    myCounterValue = myCounterValue + 1;
                     nextLsn = nextLsn + 1;
 
                     announce eCounterState, (sender=this, value=mem.value, lsn=nextLsn - 1);

@@ -90,3 +90,14 @@ machine AsyncSnapshotWriter {
         }
     }
 }
+
+fun removeSnapshot(
+    caller: machine,
+    store: ObjectStore,
+    lsn: int
+) {
+    send store, eDeleteRequest, (sender=caller, key=snapshotKey(lsn));
+    receive {
+        case eDeleteResponse: (response: tDeleteResponse) {}
+    }
+}
