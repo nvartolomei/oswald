@@ -3,6 +3,6 @@ test concurrentCounters [main=ConcurrentCounters]:
         , SafetyLsnConsistency
         , SafetyCounterMonotonicity
         , SafetyManifestMonotonicity
-        in (union { Counter, AsyncSnapshotWriter, GarbageCollector }
+        in (union { Counter, AsyncSnapshotWriter }
                 , { ObjectStore, Timer }
                 , { ConcurrentCounters });

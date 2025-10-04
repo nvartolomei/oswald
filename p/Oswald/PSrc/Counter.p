@@ -93,15 +93,14 @@ machine Counter {
         entry {
             var manifestAfterCatchUp: tVersionedManifest;
             var chunk: tLogChunk;
-            while (true) {
+
                 chunk = downloadChunk(this, objectStore, nextLsn);
                 if (chunk.found) {
                     applyChunk(chunk.body as tIncOp);
                     nextLsn = nextLsn + 1;
+                    goto CatchUpRecovery;
                 } else {
-                    break;
                 }
-            }
 
             // Check for concurrency conflict.
             validateLsnSeqConsistency(nextLsn);
@@ -128,7 +127,7 @@ machine Counter {
             // Assert we never lost our own committed increments.
             assert myCounterValue <= mem.writers[id];
 
-            while (mem.writers[id] < numIncrements) {
+            if (mem.writers[id] < numIncrements) {
                 op = (writer=id, prevValue=mem.writers[id]);
                 tUploadChunkResult = uploadChunk(this, objectStore, nextLsn, op);
                 if (!tUploadChunkResult.conflict) {
@@ -144,6 +143,8 @@ machine Counter {
                     if ($) {
                         writeSnapshotAsync(objectStore, nextLsn - 1, mem);
                     }
+
+                    goto Ready;
                 } else {
                     print format("{0} detected conflict during append at LSN {1}", this, nextLsn);
 
