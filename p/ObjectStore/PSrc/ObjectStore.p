@@ -20,6 +20,8 @@ type tDeleteResponse = (success: bool);
 event eDeleteRequest: tDeleteRequest;
 event eDeleteResponse: tDeleteResponse;
 
+event eObjectUpdated: (key: string, value: data, version: int);
+
 type Value = (body: data, version: int);
 
 machine ObjectStore {
@@ -36,6 +38,7 @@ machine ObjectStore {
 
                 if (payload.expected_version == -1 || current_value.version == payload.expected_version) {
                     objects[payload.key] = (body=payload.value, version=current_value.version + 1);
+                    announce eObjectUpdated, (key=payload.key, value=payload.value, version=objects[payload.key].version);
                     send payload.sender, eUploadResponse, (success=true, current_version=objects[payload.key].version);
                 } else {
                     send payload.sender, eUploadResponse, (success=false, current_version=current_value.version);
@@ -43,6 +46,7 @@ machine ObjectStore {
             } else {
                 if (payload.expected_version == 0 || payload.expected_version == -1) {
                     objects[payload.key] = (body=payload.value, version=1);
+                    announce eObjectUpdated, (key=payload.key, value=payload.value, version=1);
                     send payload.sender, eUploadResponse, (success=true, current_version=1);
                 } else {
                     send payload.sender, eUploadResponse, (success=false, current_version=0);
@@ -63,6 +67,7 @@ machine ObjectStore {
 
         on eDeleteRequest do (payload: tDeleteRequest) {
             objects -= (payload.key);
+            announce eObjectUpdated, (key=payload.key, value=null, version=0);
             send payload.sender, eDeleteResponse, (success=true,);
         }
     }
