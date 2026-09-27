@@ -2,20 +2,21 @@ fun snapshotKey(lsn: int): string {
     return format("snapshot/{0}", lsn);
 }
 
+/// Downloaded snapshot (found=false => no object present at that LSN).
+type tSnapshot = (body: data, found: bool);
+
 /// Download snapshot at given LSN.
-/// Precondition: snapshot at given LSN exists.
 fun downloadSnapshot(
     sender: machine,
     store: ObjectStore,
     lsn: int
-): data {
-    var ret: data;
+): tSnapshot {
+    var ret: tSnapshot;
 
     send store, eDownloadRequest, (sender=sender, key=snapshotKey(lsn));
     receive {
-        case eDownloadResponse: (metaResponse: tDownloadResponse) {
-            assert metaResponse.success;
-            ret = metaResponse.value as data;
+        case eDownloadResponse: (response: tDownloadResponse) {
+            ret = (body=response.value, found=response.success);
         }
     }
 

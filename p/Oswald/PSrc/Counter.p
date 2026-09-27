@@ -63,6 +63,8 @@ machine Counter {
 
     state SnapshotRecovery {
         entry {
+            var snapshot: tSnapshot;
+
             // Reset user-defined state.
             mem = default(tCounterState);
 
@@ -71,7 +73,13 @@ machine Counter {
             print format("{0} starting with manifest: {1}", this, versionedManifest);
 
             if (versionedManifest.m.snapshotLsn >= 0) {
-                mem = downloadSnapshot(this, objectStore, versionedManifest.m.snapshotLsn) as tCounterState;
+                snapshot = downloadSnapshot(this, objectStore, versionedManifest.m.snapshotLsn);
+                if (!snapshot.found) {
+                    print format("{0} snapshot at LSN {1} was garbage collected, restarting recovery",
+                        this, versionedManifest.m.snapshotLsn);
+                    goto SnapshotRecovery;
+                }
+                mem = snapshot.body as tCounterState;
                 print format("{0} recovered snapshot at LSN {1}: {2}",
                     this, versionedManifest.m.snapshotLsn, mem);
             }
