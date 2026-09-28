@@ -112,7 +112,7 @@ machine Counter {
             }
 
             // Check for concurrency conflict.
-            validateLsnSeqConsistency(nextLsn);
+            validateLsnSeqConsistency(nextLsn - 1);
 
             if (nextLsn == 0) {
                 print "No chunks found, starting fresh.";
@@ -213,7 +213,7 @@ machine Counter {
             // full recovery.
             //
             // See https://nvartolomei.com/oswald/#writer-garbage-collector-conflicts
-            if (safeLsn <= freshVersionedManifest.m.gcWatermark) {
+            if (safeLsn < freshVersionedManifest.m.gcWatermark) {
                 goto SnapshotRecovery;
             }
 
