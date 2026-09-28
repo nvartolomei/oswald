@@ -12,6 +12,7 @@ machine GarbageCollector {
     start state Init {
         entry (input: (store: ObjectStore)) {
             store = input.store;
+            lowerBound = -1;
             timer = new Timer((user=this, timeoutEvent=eGCStart));
             goto Idle;
         }
@@ -76,7 +77,7 @@ fun removeObsoleteObjects(caller: machine, store: ObjectStore, lowerBound: int):
     manifest = downloadManifest(caller, store);
     gcWm = manifest.m.gcWatermark;
 
-    if (gcWm <= 0) {
+    if (gcWm < 0) {
         print format("{0} no objects to remove, GC watermark {1}", caller, gcWm);
         return gcWm;
     }
@@ -89,7 +90,7 @@ fun removeObsoleteObjects(caller: machine, store: ObjectStore, lowerBound: int):
     //
     // A real implementation can implement this in a more efficient way,
     // e.g., batching deletions, listing objects, etc.
-    while (i >= lowerBound) {
+    while (i >= 0 && i >= lowerBound) {
         if (i > lowerBound) {
             removeChunk(caller, store, i);
         }
