@@ -126,7 +126,7 @@ machine Counter {
     state Ready {
         entry {
             var op: tIncOp;
-            var tUploadChunkResult: tUploadChunkResult;
+            var uploadChunkResult: tUploadChunkResult;
 
             if (nextLsn > 0) {
                 announce eCounterState, (sender=this, value=mem.value, lsn=nextLsn - 1);
@@ -139,8 +139,8 @@ machine Counter {
 
             while (mem.writers[id] < numIncrements) {
                 op = (writer=id, prevValue=mem.writers[id]);
-                tUploadChunkResult = uploadChunk(this, objectStore, nextLsn, op);
-                if (!tUploadChunkResult.conflict) {
+                uploadChunkResult = uploadChunk(this, objectStore, nextLsn, op);
+                if (!uploadChunkResult.conflict) {
                     validateLsnSeqConsistency(nextLsn);
 
                     // Apply committed chunk locally.
