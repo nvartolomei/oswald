@@ -199,8 +199,10 @@ machine Counter {
     fun validateLsnSeqConsistency(lsn: int) {
         var freshVersionedManifest: tVersionedManifest;
 
-        // NOTE: Real system would use GET-If-None-Match to avoid re-download
-        // when unchanged.
+        // A real system would use GET-If-None-Match on the manifest to skip
+        // the download when it hasn't changed. Here, we download
+        // unconditionally but skip the GC check when the version matches to
+        // illustrate that the optimization is sound.
         freshVersionedManifest = downloadManifest(this, objectStore);
         if (freshVersionedManifest.v != versionedManifest.v) {
             print format(
