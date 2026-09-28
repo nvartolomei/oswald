@@ -110,8 +110,10 @@ machine Counter {
                 }
             }
 
-            // Check for concurrency conflict.
-            validateLsnSeqConsistency(nextLsn - 1);
+            // Post condition:
+            //   conflict -> goto SnapshotRecovery
+            //   no conflict -> safeLsn = nextLsn - 1
+            validateAndAdvanceSafeLsn(nextLsn - 1);
 
             if (nextLsn == 0) {
                 print "No chunks found, starting fresh.";
@@ -141,7 +143,10 @@ machine Counter {
                 op = (writer=id, prevValue=mem.writers[id]);
                 uploadChunkResult = uploadChunk(this, objectStore, nextLsn, op);
                 if (!uploadChunkResult.conflict) {
-                    validateLsnSeqConsistency(nextLsn);
+                    // Post condition:
+                    //   conflict -> goto SnapshotRecovery
+                    //   no conflict -> safeLsn = nextLsn
+                    validateAndAdvanceSafeLsn(nextLsn);
 
                     // Apply committed chunk locally.
                     applyChunk(op);
@@ -187,15 +192,15 @@ machine Counter {
 
     /// Ensures that the manifest has not been updated by another process
     /// (like a garbage collector) while the current operation was in flight.
-    /// If a change is detected, it validates whether our safeLsn is still
-    /// above the garbage collection watermark. If not, it triggers a full
+    /// If a change is detected, it validates whether our safeLsn is still at
+    /// or above the garbage collection watermark. If not, it triggers a full
     /// recovery to prevent operating on potentially garbage-collected state.
     ///
     /// This prevents write loss scenarios where:
     /// 1. Counter falls behind and relies on old chunks
     /// 2. Garbage collector removes those chunks
     /// 3. Counter attempts to continue from an inconsistent state
-    fun validateLsnSeqConsistency(lsn: int) {
+    fun validateAndAdvanceSafeLsn(lsn: int) {
         var freshVersionedManifest: tVersionedManifest;
 
         // A real system would use GET-If-None-Match on the manifest to skip
@@ -209,11 +214,11 @@ machine Counter {
                 this, versionedManifest.v, freshVersionedManifest.v
             );
 
-            // Our safe LSN has been garbage collected - restart full recovery.
-            // Chunks we depend on may have been garbage collected and we need
-            // full recovery.
+            // The GC watermark has passed safeLsn: chunks after it that we read
+            // or wrote may have been deleted and re-created. Restart full recovery.
             //
             // See https://nvartolomei.com/oswald/#writer-garbage-collector-conflicts
+            // See https://nvartolomei.com/oswald/#tailer-garbage-collector-conflicts
             if (safeLsn < freshVersionedManifest.m.gcWatermark) {
                 goto SnapshotRecovery;
             }
@@ -222,7 +227,10 @@ machine Counter {
             versionedManifest = freshVersionedManifest;
         }
 
-        /// No manifest change, GC is surely behind our safe point.
+        // Passed: the GC watermark hasn't passed safeLsn, so no chunk after it
+        // has been deleted. Every chunk we read or wrote after safeLsn is
+        // therefore canonical (the original PUT for its LSN), not a ghost
+        // re-created after collection. Extend the validated history over them.
         safeLsn = lsn;
     }
 }
