@@ -21,19 +21,16 @@ machine Counter {
     var objectStore: ObjectStore;
     var versionedManifest: tVersionedManifest;
 
-    /// Log Sequence Number (LSN) to assign to the next log chunk.
-    var nextLsn: int;
-
-    /// The "safe" LSN is a checkpoint in the LSN sequence that this counter has
-    /// has complete knowledge of. If GC advances the watermark beyond this LSN,
-    /// the counter must perform full recovery to avoid operating on potentially
-    /// garbage-collected state.
+    /// The "safe" LSN is the last LSN of the log prefix this counter
+    /// has complete knowledge of. If GC advances its watermark beyond this LSN,
+    /// the counter must perform full recovery, because chunks it read past this
+    /// point may have been deleted and re-created.
     ///
-    /// It is initialized with the snapshot LSN at the time of recovery and
-    /// periodically updated to latest LSN as long as we are ahead of the GC
-    /// watermark.
+    /// It is initialized with the snapshot LSN at recovery and advanced each
+    /// time a read or append is validated, as long as the GC watermark hasn't
+    /// passed it.
     ///
-    /// This mechanism prevents write loss when a counter falls behind and the
+    /// This mechanism prevents write loss when the counter falls behind and the
     /// garbage collector removes chunks under its feet.
     var safeLsn: int;
 
@@ -84,10 +81,8 @@ machine Counter {
                     this, versionedManifest.m.snapshotLsn, mem);
             }
 
-            // Set safeLsn to the current snapshot LSN - this is our "safe point"
-            // that we know hasn't been garbage collected yet.
+            // Snapshot covers the log prefix through snapshotLsn.
             safeLsn = versionedManifest.m.snapshotLsn;
-            nextLsn = versionedManifest.m.snapshotLsn + 1;
 
             if (!(id in mem.writers)) {
                 mem.writers[id] = 0;
@@ -100,6 +95,10 @@ machine Counter {
     state CatchUpRecovery {
         entry {
             var chunk: tLogChunk;
+            var nextLsn: int;
+
+            nextLsn = safeLsn + 1;
+
             while (true) {
                 chunk = downloadChunk(this, objectStore, nextLsn);
                 if (chunk.found) {
@@ -127,11 +126,12 @@ machine Counter {
 
     state Ready {
         entry {
+            var chunkLsn: int;
             var op: tIncOp;
             var uploadChunkResult: tUploadChunkResult;
 
-            if (nextLsn > 0) {
-                announce eCounterState, (sender=this, value=mem.value, lsn=nextLsn - 1);
+            if (safeLsn >= 0) {
+                announce eCounterState, (sender=this, value=mem.value, lsn=safeLsn);
             }
 
             // Assert we never lost our own committed increments.
@@ -140,26 +140,28 @@ machine Counter {
                     myCounterValue, mem.writers[id]);
 
             while (mem.writers[id] < numIncrements) {
+                chunkLsn = safeLsn + 1;
+
                 op = (writer=id, prevValue=mem.writers[id]);
-                uploadChunkResult = uploadChunk(this, objectStore, nextLsn, op);
+                uploadChunkResult = uploadChunk(this, objectStore, chunkLsn, op);
                 if (!uploadChunkResult.conflict) {
                     // Post condition:
                     //   conflict -> goto SnapshotRecovery
-                    //   no conflict -> safeLsn = nextLsn
-                    validateAndAdvanceSafeLsn(nextLsn);
+                    //   no conflict -> safeLsn = chunkLsn
+                    validateAndAdvanceSafeLsn(chunkLsn);
 
                     // Apply committed chunk locally.
                     applyChunk(op);
                     myCounterValue = myCounterValue + 1;
-                    nextLsn = nextLsn + 1;
 
-                    announce eCounterState, (sender=this, value=mem.value, lsn=nextLsn - 1);
+                    announce eCounterState, (sender=this, value=mem.value, lsn=safeLsn);
 
                     if ($) {
-                        writeSnapshotAsync(objectStore, nextLsn - 1, mem);
+                        writeSnapshotAsync(objectStore, safeLsn, mem);
                     }
                 } else {
-                    print format("{0} detected conflict during append at LSN {1}", this, nextLsn);
+                    // See https://nvartolomei.com/oswald/#writer-writer-conflicts
+                    print format("{0} detected conflict during append at LSN {1}", this, chunkLsn);
 
                     // Catch up with latest state and retry.
                     goto CatchUpRecovery;
