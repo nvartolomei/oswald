@@ -99,7 +99,6 @@ machine Counter {
 
     state CatchUpRecovery {
         entry {
-            var manifestAfterCatchUp: tVersionedManifest;
             var chunk: tLogChunk;
             while (true) {
                 chunk = downloadChunk(this, objectStore, nextLsn);
