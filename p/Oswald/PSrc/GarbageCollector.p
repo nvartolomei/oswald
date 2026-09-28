@@ -89,8 +89,10 @@ fun removeObsoleteObjects(caller: machine, store: ObjectStore, lowerBound: int):
     //
     // A real implementation can implement this in a more efficient way,
     // e.g., batching deletions, listing objects, etc.
-    while (i > lowerBound) {
-        removeChunk(caller, store, i);
+    while (i >= lowerBound) {
+        if (i > lowerBound) {
+            removeChunk(caller, store, i);
+        }
         if (i < gcWm) {
             removeSnapshot(caller, store, i);
         }
