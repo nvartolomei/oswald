@@ -218,7 +218,8 @@ machine Counter {
                 goto SnapshotRecovery;
             }
 
-
+            // Cache the fresh manifest so the next check can take the fast path.
+            versionedManifest = freshVersionedManifest;
         }
 
         /// No manifest change, GC is surely behind our safe point.
